@@ -4,7 +4,7 @@
 
 # SubPicker
 
-**Pick the best subtitle for every language from every source, put the tracks in perfect MKVToolNix order and mux them into one MKS / MKV.**
+**Pick the best subtitle for every language from every source, put the tracks in perfect MKVToolNix order and mux them into one MKS.**
 
 ![Windows 10 / 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square&logo=windows&logoColor=white)
 ![.NET Framework 4.8](https://img.shields.io/badge/.NET%20Framework-4.8-512BD4?style=flat-square&logo=dotnet&logoColor=white)
@@ -55,7 +55,7 @@
 - PGS image subtitles are left out automatically (use the delay column for them).
 
 ### 💾 Export
-- **MKS** or **MKV** through mkvmerge, with languages, names, flags, delays and Source tags.
+- **MKS** through mkvmerge, with languages, names, flags, delays and Source tags.
 - Or plain **SRT files**, optionally numbered in track order, with delays applied.
 
 ---
@@ -72,7 +72,7 @@ That's it. Open a subtitle folder, download one, or drop an MKV onto the window.
 
 | Tool | Used for | Found automatically |
 |---|---|:---:|
-| [MKVToolNix](https://mkvtoolnix.download/) | MKS / MKV export, extracting from MKV | ✅ |
+| [MKVToolNix](https://mkvtoolnix.download/) | MKS export, extracting from MKV | ✅ |
 | [7-Zip](https://www.7-zip.org/) or WinRAR | Unpacking downloads | ✅ |
 | [alass](https://github.com/kaegi/alass) or [ffsubsync](https://github.com/smacke/ffsubsync) | Sync | ✅ if on PATH |
 | Python + `batchSync.py` | Batch sync (optional) | `batchSync.py` next to the exe |
