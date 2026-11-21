@@ -18,13 +18,7 @@ settings.json
 *Source Tag.xml
 
 # build output
-dist/
-work/
-build/work/
-__pycache__/
-*.pyc
-
-# C# build output
 bin/
 obj/
-
+.vs/
+*.user

@@ -1,67 +1,126 @@
+<div align="center">
+
+<img src="docs/logo.png" width="96" alt="SubPicker logo">
+
 # SubPicker
 
-A Windows desktop app to download, pick, sync and export subtitles in MKVToolNix track order.
+**Pick the best subtitle for every language from every source, put the tracks in perfect MKVToolNix order and mux them into one MKS / MKV.**
 
-There are two versions with the same features:
+![Windows 10 / 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square&logo=windows&logoColor=white)
+![.NET Framework 4.8](https://img.shields.io/badge/.NET%20Framework-4.8-512BD4?style=flat-square&logo=dotnet&logoColor=white)
+![Single exe](https://img.shields.io/badge/single%20exe-~190%20KB-2ea44f?style=flat-square)
+![No install](https://img.shields.io/badge/install-not%20needed-4b8bff?style=flat-square)
 
-| Version | Folder | Download | Notes |
-|---|---|---|---|
-| **C# / WinForms** (recommended) | [`csharp/`](csharp) | single `SubPicker.exe` (~190 KB) | Runs on .NET Framework 4.8, which is built into Windows 10 / 11 - nothing else to install |
-| Python / Tkinter | repo root | `SubPicker.exe` + `_internal` folder | Bundles Python (PyInstaller) |
+### [⬇️ Download the latest SubPicker.exe](../../releases/latest)
 
-## Features
+<img src="docs/pick.png" alt="Pick subtitles" width="900">
 
-- **Download** subtitle packs from a subtitle site (URL and login set in Settings; the password is stored encrypted with Windows DPAPI).
-- **Pick subtitles**
-  - Grouped by language.
-  - Provider priority list that you reorder by dragging (press and hold); double-click a provider to show only its files.
-  - SDH and forced tracks are detected automatically from the subtitle text.
-  - Drag & drop subtitle files, folders or MKVs onto the window.
-- **From MKV**: extract subtitle tracks from any MKV into a folder you choose, then pick from them.
-- **Track order**
-  - Order the tracks the way MKVToolNix will, with track names, SDH / forced / default flags and delay.
-  - Per-provider Source tag XMLs are filled in automatically.
-  - A SYNC tick column chooses which tracks get synced.
-- **Sync**
-  - With alass or ffsubsync against an outside reference or one of the tracks.
-  - Batch sync or a single file.
-  - PGS (.sup) tracks are excluded from sync; use the delay column for those.
-- **Export**: MKS, MKV (mkvmerge) or plain SRT files.
+</div>
 
-## Requirements
+---
 
-| Tool | Needed for |
-|---|---|
-| [MKVToolNix](https://mkvtoolnix.download/) | MKS / MKV export, extracting from MKV |
-| [alass](https://github.com/kaegi/alass) or [ffsubsync](https://github.com/smacke/ffsubsync) | Sync |
-| Python + `batchSync.py` | Batch sync (optional) |
-| 7-Zip or WinRAR | Unpacking downloaded archives |
+## ✨ Features
 
-Tools on PATH or in their default install folders are found automatically; otherwise set them in **Settings**.
+### 🔎 Download
+- Search your subtitle site by **TMDB / IMDb id** (`1698863`, `tt1234567`) or by title.
+- Tick the folders you want: SubPicker downloads, unpacks (7-Zip / WinRAR, nested archives too) and opens them.
+- Learns new provider names from the site's folder names (e.g. `BB` → *Blockbuster*).
 
-## C# version
+### 🎯 Pick subtitles
+- Every language in one list, with a **primary provider** (iTunes by default) and the others filling the gaps.
+- Orange = missing from the primary, green = available, so you see at a glance what you still need.
+- **SDH** and **forced** tracks are detected from the subtitle text itself, plus forced flags inside PGS (`.sup`).
+- Provider priority list: **press and hold to drag**, double-click a provider to see only its files.
+- Drag & drop subtitle files, folders or an MKV straight onto the window.
 
-Build (needs the .NET SDK; the output only needs .NET Framework 4.8):
+### 📦 From MKV
+- Pull the subtitle tracks out of **any MKV** into a folder you choose (by default a new folder named after the MKV).
+- One compact card per track with language, name, line count, size and DEFAULT / FORCED / SDH badges.
+
+<div align="center"><img src="docs/extract.png" alt="Extract subtitle tracks" width="640"></div>
+
+### 🧩 Track order
+- Tracks are sorted the way MKVToolNix lists them: English first, then languages A–Z, regional variants in the right order (Castilian → Latin American, Simplified → Traditional…).
+- Track names are filled in for you (*SDH*, *European*, *Canadian*, *Traditional*, *Alternate*…).
+- Edit language, name, SDH / forced / default flags and delay right in the table.
+- **Press and hold a row, then drag** to reorder - several selected rows move together.
+- **Source tags**: per-provider XML files (e.g. `iT Source Tag.xml`) are attached automatically; or type a text and the XML is made for you.
+
+<div align="center"><img src="docs/track-order.png" alt="Track order" width="900"></div>
+
+### ⏱️ Sync
+- Sync against an outside video / audio / subtitle, or against one of the tracks.
+- **alass** or **ffsubsync**, as a whole batch (via `batchSync.py`) or file by file.
+- A **SYNC** tick column decides which tracks are synced - clicking rows never changes it.
+- PGS image subtitles are left out automatically (use the delay column for them).
+
+### 💾 Export
+- **MKS** or **MKV** through mkvmerge, with languages, names, flags, delays and Source tags.
+- Or plain **SRT files**, optionally numbered in track order, with delays applied.
+
+---
+
+## 🚀 Getting started
+
+1. Download **`SubPicker.exe`** from the [latest release](../../releases/latest) and put it in any folder.
+2. Run it - nothing to install.
+3. Open **⚙ Settings** once: enter your subtitle site and login, and check the tool paths (most are found automatically).
+
+That's it. Open a subtitle folder, download one, or drop an MKV onto the window.
+
+## 🧰 Tools it works with
+
+| Tool | Used for | Found automatically |
+|---|---|:---:|
+| [MKVToolNix](https://mkvtoolnix.download/) | MKS / MKV export, extracting from MKV | ✅ |
+| [7-Zip](https://www.7-zip.org/) or WinRAR | Unpacking downloads | ✅ |
+| [alass](https://github.com/kaegi/alass) or [ffsubsync](https://github.com/smacke/ffsubsync) | Sync | ✅ if on PATH |
+| Python + `batchSync.py` | Batch sync (optional) | `batchSync.py` next to the exe |
+
+Anything not found can be set in **Settings**.
+
+## 🔒 Settings & privacy
+
+- Settings are saved in **`settings.json` next to `SubPicker.exe`** - the app is fully portable.
+- The site password is encrypted with Windows DPAPI, so it only works for your Windows account.
+- A fresh copy of the exe always starts with empty settings: to share the app, send **only `SubPicker.exe`**, never your `settings.json`.
+
+## 🛠️ Build from source
+
+Needs the [.NET SDK](https://dotnet.microsoft.com/download) (the result only needs .NET Framework 4.8, which ships with Windows).
+
+```powershell
+dotnet build SubPicker.csproj -c Release
+```
+
+The app is the single file `bin\Release\net48\SubPicker.exe`.
 
 ```
-dotnet build csharp\SubPicker.csproj -c Release
+src/
+├─ Core.cs          subtitle parsing, SDH / forced / PGS detection, languages, providers
+├─ Services.cs      settings, tool detection, processes, subtitle site, archives
+├─ MainForm.cs      main window: Download, Pick subtitles, Track order, export bar
+├─ Actions.cs       Settings, download, From MKV, sync and export
+├─ UI.cs            dark theme and controls
+└─ FolderPicker.cs  modern folder picker
 ```
 
-The app is the single file `csharp\bin\Release\net48\SubPicker.exe`. It saves its settings in `settings.json` next to the exe; a fresh copy starts with empty settings, so the exe alone is safe to share.
+## ❓ FAQ
 
-## Python version
+<details>
+<summary><b>Does it need .NET or anything else installed?</b></summary>
 
-Run from source:
+No. It uses .NET Framework 4.8, which is part of Windows 10 and 11.
+</details>
 
-```
-py SubPicker.py
-```
+<details>
+<summary><b>Why is it a single small exe?</b></summary>
 
-### Build the portable exe
+The app is compiled C# using the .NET Framework that Windows already has, so nothing has to be bundled with it.
+</details>
 
-```
-py -m pip install pyinstaller
-py -m PyInstaller --noconfirm build\SubPicker.spec
-```
+<details>
+<summary><b>Where are my settings?</b></summary>
 
-The app is in `dist\SubPicker\`. Keep `SubPicker.exe` and the `_internal` folder together. Settings are saved in `settings.json` next to the exe; that file is personal and is git-ignored.
+In `settings.json` in the same folder as `SubPicker.exe`. Delete it to start fresh.
+</details>
