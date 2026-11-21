@@ -1,6 +1,13 @@
 # SubPicker
 
-A Windows desktop app (Python / Tkinter) to download, pick, sync and export subtitles in MKVToolNix track order.
+A Windows desktop app to download, pick, sync and export subtitles in MKVToolNix track order.
+
+There are two versions with the same features:
+
+| Version | Folder | Download | Notes |
+|---|---|---|---|
+| **C# / WinForms** (recommended) | [`csharp/`](csharp) | single `SubPicker.exe` (~190 KB) | Runs on .NET Framework 4.8, which is built into Windows 10 / 11 - nothing else to install |
+| Python / Tkinter | repo root | `SubPicker.exe` + `_internal` folder | Bundles Python (PyInstaller) |
 
 ## Features
 
@@ -32,13 +39,25 @@ A Windows desktop app (Python / Tkinter) to download, pick, sync and export subt
 
 Tools on PATH or in their default install folders are found automatically; otherwise set them in **Settings**.
 
-## Run from source
+## C# version
+
+Build (needs the .NET SDK; the output only needs .NET Framework 4.8):
+
+```
+dotnet build csharp\SubPicker.csproj -c Release
+```
+
+The app is the single file `csharp\bin\Release\net48\SubPicker.exe`. It saves its settings in `settings.json` next to the exe; a fresh copy starts with empty settings, so the exe alone is safe to share.
+
+## Python version
+
+Run from source:
 
 ```
 py SubPicker.py
 ```
 
-## Build the portable exe
+### Build the portable exe
 
 ```
 py -m pip install pyinstaller

@@ -23,3 +23,8 @@ work/
 build/work/
 __pycache__/
 *.pyc
+
+# C# build output
+bin/
+obj/
+
