@@ -206,6 +206,7 @@ namespace SubPicker
             var add = Th.Btn("+ Add new…", (s, e) => Edit(null), true); add.Margin = new Padding(0, 0, Th.Px(6), 0);
             var chg = Th.Btn("Change…", (s, e) => { if (Current() != null) Edit(Current()); }); chg.Margin = new Padding(0, 0, Th.Px(6), 0);
             var rem = Th.Btn("Remove", (s, e) => { var c = Current(); if (c != null) { table.Remove(c); Fill(); } });
+            rem.Margin = new Padding(0);                                  // same margins as the other two buttons
             btns.Controls.AddRange(new Control[] { add, chg, rem });
             var gridCard = new Card { Dock = DockStyle.Fill, MinimumSize = new Size(0, Th.Px(240)) };
             gridCard.Controls.Add(grid);
@@ -251,20 +252,15 @@ namespace SubPicker
         {
             dlGroups = groups;
             dlSel = groups.Keys.ToDictionary(k => k, k => true);
-            dlRows.Clear();
-            foreach (var kv in groups)
-            {
-                string name = kv.Key.Substring(kv.Key.LastIndexOf('/') + 1);
-                dlRows.Add((true, kv.Key, name, kv.Value.Files.ToString(), $"{kv.Value.Size / 1024.0:0} KB", kv.Key));
-                foreach (var sub in kv.Value.Sub) dlRows.Add((false, kv.Key, sub.Key, sub.Value.ToString(), "", ""));
-            }
-            dlGrid.RowCount = 0;
-            dlGrid.RowCount = dlRows.Count;
+            dlClosed.Clear();
+            dlOpened.Clear();
+            DlRebuildRows();
             int nfiles = groups.Values.Sum(g => g.Files);
             dlInfo.Text = groups.Count == 0 ? $"No folder with {needle} found."
                 : $"{groups.Count} folder(s), {nfiles} files" + (trunc ? "  (results truncated)" : "");
             if (groups.Count > 0 && dlDir.Text == "")
-                dlDir.Text = cfg["download_dir"] != "" ? cfg["download_dir"] : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                dlDir.Text = cfg["download_last"] != "" ? cfg["download_last"] : cfg["download_dir"] != "" ? cfg["download_dir"]
+                           : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
         }
 
         void DlStart()
@@ -273,6 +269,7 @@ namespace SubPicker
             if (roots.Count == 0) { Ask.Info(this, "Search first and tick at least one folder."); return; }
             string baseDir = dlDir.Text.Trim();
             if (baseDir == "") { Ask.Warn(this, "Choose where to download."); return; }
+            if (cfg["download_last"] != baseDir) { cfg["download_last"] = baseDir; cfg.Save(); }    // remembered for next time
             string name = Regex.Replace(roots[0].Substring(roots[0].LastIndexOf('/') + 1), @"[<>:""/\\|?*]", "_").Trim();
             if (name == "") name = "subtitles";
             string target = Path.Combine(baseDir, name);
@@ -333,7 +330,7 @@ namespace SubPicker
                 }
                 log($"Done: {added} subtitle file(s) in {target}", "ok");
                 int a = added;
-                Ui(() => { dlInfo.Text = $"Downloaded {a} file(s)"; dlProg.Value = 100; if (a > 0 && openAfter) { LoadFolder(target); ShowPage("pick"); } });
+                Ui(() => { dlInfo.Text = $"Downloaded {a} file(s)"; dlProg.Value = 100; if (a > 0 && openAfter) { LoadFolder(target, downloaded: true); ShowPage("pick"); } });
             }
             catch (Exception ex)
             {
@@ -586,7 +583,7 @@ namespace SubPicker
             grid.Controls.Add(tl, 1, 0);
 
             grid.Controls.Add(H("Reference"), 0, 1);
-            var refMode = new Seg(new[] { ("file", "Outside file"), ("track", "A track in this list") }, "file", Th.Panel) { Margin = new Padding(0, Th.Px(6), 0, 0) };
+            var refMode = new Seg(new[] { ("file", "From PC"), ("track", "A track in this list") }, "file", Th.Panel) { Margin = new Padding(0, Th.Px(6), 0, 0) };
             grid.Controls.Add(refMode, 1, 1);
             var refRow = new TableLayoutPanel { Dock = DockStyle.Fill, Height = Th.Px(36), ColumnCount = 2, BackColor = Th.Panel, Margin = new Padding(0, Th.Px(6), 0, 0) };
             refRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -766,6 +763,7 @@ namespace SubPicker
                 else if (t.Delay != 0) { Core.ShiftFile(t.Src, dst, t.Delay); shifted++; }
                 else File.Copy(t.Src, dst, true);
             }
+            RememberExportDir(outp);
             string msg = $"Copied {plan.Count} file(s) to:\n{outp}" + (shifted > 0 ? $"\n\nDelay applied to {shifted} file(s)." : "");
             if (Ask.YesNo(this, msg + "\n\nOpen the folder?")) Tools.OpenPath(outp);
         }
@@ -841,6 +839,7 @@ namespace SubPicker
             var lines = p.stdout.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Trim() != "" && !l.StartsWith("Progress")).ToList();
             if (p.code == 0 || p.code == 1)
             {
+                RememberExportDir(Path.GetDirectoryName(Path.GetFullPath(outp)));
                 string msg = $"Created {Path.GetFileName(outp)}\n{tracks.Count} subtitle tracks";
                 var warns = lines.Where(l => l.Contains("arning")).Take(6).ToList();
                 if (warns.Count > 0) msg += "\n\nWarnings:\n" + string.Join("\n", warns);

@@ -457,7 +457,13 @@ namespace SubPicker
             return ($"path like \"*{t}*\"", t);
         }
 
-        public class Group { public int Files; public long Size; public SortedDictionary<string, int> Sub = new SortedDictionary<string, int>(StringComparer.Ordinal); }
+        public class Group
+        {
+            public int Files; public long Size;
+            public SortedDictionary<string, int> Sub = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            /// every file per sub-folder: (file name, size) - shown when a sub-folder is expanded
+            public Dictionary<string, List<(string name, long size)>> List = new Dictionary<string, List<(string, long)>>();
+        }
 
         /// Group search hits by the folder whose name contains the needle (the [id] folder)
         public static SortedDictionary<string, Group> GroupHits(IEnumerable hits, string needle)
@@ -475,10 +481,13 @@ namespace SubPicker
                 string root = string.Join("/", parts.Take(idx + 1));
                 if (!groups.TryGetValue(root, out var g)) groups[root] = g = new Group();
                 g.Files++;
-                if (h.TryGetValue("sz", out var sz)) g.Size += Convert.ToInt64(sz);
+                long size = h.TryGetValue("sz", out var sz) ? Convert.ToInt64(sz) : 0;
+                g.Size += size;
                 string subdir = string.Join("/", parts.Skip(idx + 1).Take(Math.Max(0, parts.Length - idx - 2)));
                 if (subdir == "") subdir = "·";
                 g.Sub[subdir] = (g.Sub.TryGetValue(subdir, out var c) ? c : 0) + 1;
+                if (!g.List.TryGetValue(subdir, out var lst)) g.List[subdir] = lst = new List<(string, long)>();
+                lst.Add((parts[parts.Length - 1], size));
             }
             return groups;
         }

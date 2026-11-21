@@ -74,6 +74,8 @@ namespace SubPicker
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             BuildUi();
             KeyPreview = true;
+            // coming back to the window (e.g. after copying a new "... Source Tag.xml" into the tags folder)
+            Activated += (s, e) => { if (subs.Count > 0 && MergeTagsDir()) RefreshTracks(); };
             Shown += (s, e) =>
             {
                 EnableDrop(this);
@@ -137,6 +139,7 @@ namespace SubPicker
             page0.Visible = p == "download";
             page1.Visible = p == "pick";
             page2.Visible = p == "order";
+            if (p == "order" && subs.Count > 0 && MergeTagsDir()) RefreshTracks();     // tag files added meanwhile
         }
 
         Control BuildExport()
@@ -149,7 +152,7 @@ namespace SubPicker
             bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             for (int i = 0; i < 3; i++) bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             var head = Th.Head("Export"); head.Margin = new Padding(0, Th.Px(8), Th.Px(12), 0);
-            fmtSeg = new Seg(new[] { ("mks", "MKS"), ("mkv", "MKV"), ("srt", "SRT files") }, "mks", Th.Panel);
+            fmtSeg = new Seg(new[] { ("mks", "MKS"), ("srt", "SRT files") }, "mks", Th.Panel);
             fmtSeg.Changed += OnFmt;
             outPath = new Field { Margin = new Padding(Th.Px(12), Th.Px(1), Th.Px(6), 0) };
             var browse = Th.Btn("Browse…", (s, e) => PickOut()); browse.Margin = new Padding(0);
@@ -172,8 +175,44 @@ namespace SubPicker
         Grid dlGrid;
         SortedDictionary<string, SiteClient.Group> dlGroups = new SortedDictionary<string, SiteClient.Group>();
         Dictionary<string, bool> dlSel = new Dictionary<string, bool>();
-        readonly List<(bool group, string root, string text, string files, string size, string where)> dlRows =
-            new List<(bool, string, string, string, string, string)>();
+        /// Download list row: Level 0 = site folder (tick box), 1 = provider sub-folder, 2 = subtitle file
+        class DlRow { public int Level; public string Root, Sub, Text, Files = "", Size = "", Where = ""; public bool Sdh, Forced; }
+        readonly List<DlRow> dlRows = new List<DlRow>();
+        readonly HashSet<string> dlClosed = new HashSet<string>();      // site folders the user collapsed
+        readonly HashSet<string> dlOpened = new HashSet<string>();      // sub-folders the user expanded
+
+        void DlRebuildRows()
+        {
+            int first = dlGrid.FirstDisplayedScrollingRowIndex;
+            dlRows.Clear();
+            foreach (var kv in dlGroups)
+            {
+                string root = kv.Key;
+                dlRows.Add(new DlRow { Level = 0, Root = root, Text = root.Substring(root.LastIndexOf('/') + 1),
+                                       Files = kv.Value.Files.ToString(), Size = $"{kv.Value.Size / 1024.0:0} KB", Where = root });
+                if (dlClosed.Contains(root)) continue;
+                foreach (var sub in kv.Value.Sub)
+                {
+                    long sz = kv.Value.List.TryGetValue(sub.Key, out var l) ? l.Sum(x => x.size) : 0;
+                    dlRows.Add(new DlRow { Level = 1, Root = root, Sub = sub.Key, Text = sub.Key == "·" ? "(in this folder)" : sub.Key,
+                                           Files = sub.Value.ToString(), Size = $"{sz / 1024.0:0} KB" });
+                    if (!dlOpened.Contains(root + "|" + sub.Key) || l == null) continue;
+                    foreach (var (name, size) in l.OrderBy(x => x.name, StringComparer.OrdinalIgnoreCase))
+                    {
+                        string stem = Path.GetFileNameWithoutExtension(name);
+                        var (tag, fl) = Core.ParseLang(stem);
+                        string where = tag == "und" ? "" : $"{Core.LangDisplay(tag)}  ·  {tag}";
+                        if (name.EndsWith(".sup", StringComparison.OrdinalIgnoreCase)) where += "  ·  PGS";
+                        dlRows.Add(new DlRow { Level = 2, Root = root, Sub = sub.Key, Text = name, Size = $"{size / 1024.0:0} KB", Where = where,
+                                               Sdh = fl.Overlaps(Core.SdhFlags), Forced = fl.Contains("forced") });
+                    }
+                }
+            }
+            dlGrid.RowCount = 0;
+            dlGrid.RowCount = dlRows.Count;
+            dlGrid.ClearSelection();
+            if (first >= 0 && first < dlRows.Count) try { dlGrid.FirstDisplayedScrollingRowIndex = first; } catch { }
+        }
 
         void BuildDownload(Panel t)
         {
@@ -198,14 +237,29 @@ namespace SubPicker
                 {
                     HeaderText = name, Width = Th.Px(w), SortMode = DataGridViewColumnSortMode.NotSortable,
                     AutoSizeMode = fill ? DataGridViewAutoSizeColumnMode.Fill : DataGridViewAutoSizeColumnMode.None,
+                    MinimumWidth = fill ? Th.Px(400) : Th.Px(40),
                 });
+            dlGrid.ScrollBars = ScrollBars.Both;
             dlGrid.CellPainting += DlPaint;
             dlGrid.CellMouseDown += (s, e) =>
             {
-                if (e.RowIndex < 0 || e.RowIndex >= dlRows.Count || !dlRows[e.RowIndex].group) return;
-                string root = dlRows[e.RowIndex].root;
-                dlSel[root] = !dlSel[root];
-                dlGrid.InvalidateRow(e.RowIndex);
+                if (e.RowIndex < 0 || e.RowIndex >= dlRows.Count || e.Button != MouseButtons.Left) return;
+                var r = dlRows[e.RowIndex];
+                if (r.Level == 0)
+                {
+                    if (e.ColumnIndex == 0 && e.X < Th.Px(26))              // ▶ / ▼ : show or hide its sub-folders
+                    {
+                        if (!dlClosed.Remove(r.Root)) dlClosed.Add(r.Root);
+                        BeginInvoke(new Action(DlRebuildRows));
+                    }
+                    else { dlSel[r.Root] = !dlSel[r.Root]; dlGrid.InvalidateRow(e.RowIndex); }
+                }
+                else if (r.Level == 1)                                    // anywhere on a sub-folder: show / hide its files
+                {
+                    string k = r.Root + "|" + r.Sub;
+                    if (!dlOpened.Remove(k)) dlOpened.Add(k);
+                    BeginInvoke(new Action(DlRebuildRows));
+                }
             };
             mid.Controls.Add(dlGrid);
 
@@ -216,7 +270,7 @@ namespace SubPicker
             bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             for (int i = 0; i < 3; i++) bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             var dh = Th.Head("Download to"); dh.Margin = new Padding(0, Th.Px(8), Th.Px(10), 0);
-            dlDir = new Field(cfg["download_dir"]) { Margin = new Padding(0, Th.Px(1), Th.Px(6), 0) };
+            dlDir = new Field(cfg["download_last"] != "" ? cfg["download_last"] : cfg["download_dir"]) { Margin = new Padding(0, Th.Px(1), Th.Px(6), 0) };
             var br = Th.Btn("Browse…", (s, e) => { var d = Ask.Folder(this, "Download to", dlDir.Text); if (d != null) dlDir.Text = d; });
             br.Margin = new Padding(0);
             dlOpen = new Check("Open in Pick subtitles when done", true, Th.Panel) { Margin = new Padding(Th.Px(12), Th.Px(3), Th.Px(12), 0) };
@@ -249,23 +303,51 @@ namespace SubPicker
             using (var bb = new SolidBrush(selected ? Th.Sel : Th.Panel)) g.FillRectangle(bb, e.CellBounds);
             var cb = e.CellBounds;
             var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis;
+            var arrowFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
+            Color fg = r.Level == 0 ? Th.Fg : r.Level == 1 ? Th.Fg : Th.Muted;
             if (e.ColumnIndex == 0)
             {
-                int x = cb.X + Th.Px(8);
-                if (r.group)
+                int x = cb.X + Th.Px(4);
+                if (r.Level == 0)
                 {
-                    var img = Th.Box(dlSel.TryGetValue(r.root, out var on) && on ? "on" : "off", selected ? Th.Sel : Th.Panel);
+                    TextRenderer.DrawText(g, dlClosed.Contains(r.Root) ? "▶" : "▼", Th.Small, new Rectangle(x, cb.Y, Th.Px(20), cb.Height), Th.Muted, arrowFlags);
+                    x += Th.Px(22);
+                    var img = Th.Box(dlSel.TryGetValue(r.Root, out var on) && on ? "on" : "off", selected ? Th.Sel : Th.Panel);
                     g.DrawImage(img, x, cb.Y + (cb.Height - img.Height) / 2);
                     x += img.Width + Th.Px(8);
                 }
-                else x += Th.Px(26);
-                TextRenderer.DrawText(g, r.text, r.group ? Th.Bold : Th.Base, new Rectangle(x, cb.Y, cb.Right - x, cb.Height), r.group ? Th.Fg : Th.Muted, flags);
+                else if (r.Level == 1)
+                {
+                    x += Th.Px(30);
+                    TextRenderer.DrawText(g, dlOpened.Contains(r.Root + "|" + r.Sub) ? "▼" : "▶", Th.Small, new Rectangle(x, cb.Y, Th.Px(18), cb.Height), Th.Accent, arrowFlags);
+                    x += Th.Px(22);
+                }
+                else x += Th.Px(76);
+                TextRenderer.DrawText(g, r.Text, r.Level < 2 ? Th.Bold : Th.Base, new Rectangle(x, cb.Y, cb.Right - x, cb.Height),
+                    r.Level == 1 ? Th.PillFg : fg, flags);
+            }
+            else if (e.ColumnIndex == 3 && r.Level == 2)
+            {
+                // language + flag badges for a single subtitle file
+                int x = cb.X + Th.Px(8);
+                int tw = TextRenderer.MeasureText(g, r.Where, Th.Base).Width;
+                TextRenderer.DrawText(g, r.Where, Th.Base, new Rectangle(x, cb.Y, cb.Right - x, cb.Height), Th.Fg, flags);
+                x += tw + Th.Px(6);
+                foreach (var (on, txt, col) in new[] { (r.Sdh, "SDH", Th.Accent), (r.Forced, "FORCED", Th.Edit) })
+                {
+                    if (!on) continue;
+                    int bw = TextRenderer.MeasureText(g, txt, Th.SmallBold).Width + Th.Px(8);
+                    var br2 = new Rectangle(x, cb.Y + Th.Px(7), bw, cb.Height - Th.Px(14));
+                    using (var b = new SolidBrush(Th.PillBg)) g.FillRectangle(b, br2);
+                    TextRenderer.DrawText(g, txt, Th.SmallBold, br2, col, arrowFlags);
+                    x += bw + Th.Px(4);
+                }
             }
             else
             {
-                string v = e.ColumnIndex == 1 ? r.files : e.ColumnIndex == 2 ? r.size : r.where;
+                string v = e.ColumnIndex == 1 ? r.Files : e.ColumnIndex == 2 ? r.Size : r.Where;
                 var f = flags | (e.ColumnIndex < 3 ? TextFormatFlags.HorizontalCenter : TextFormatFlags.Left);
-                TextRenderer.DrawText(g, v, Th.Base, new Rectangle(cb.X + Th.Px(6), cb.Y, cb.Width - Th.Px(10), cb.Height), r.group ? Th.Fg : Th.Muted, f);
+                TextRenderer.DrawText(g, v, Th.Base, new Rectangle(cb.X + Th.Px(6), cb.Y, cb.Width - Th.Px(10), cb.Height), r.Level == 0 ? Th.Fg : Th.Muted, f);
             }
             e.Handled = true;
         }
@@ -327,7 +409,9 @@ namespace SubPicker
                 {
                     HeaderText = name, Width = Th.Px(wd), SortMode = DataGridViewColumnSortMode.NotSortable,
                     AutoSizeMode = fill ? DataGridViewAutoSizeColumnMode.Fill : DataGridViewAutoSizeColumnMode.None,
+                    MinimumWidth = fill ? Th.Px(460) : Th.Px(40),   // narrow window -> horizontal scrollbar instead of cut text
                 });
+            pickGrid.ScrollBars = ScrollBars.Both;
             pickGrid.CellPainting += PickPaint;
             pickGrid.CellMouseDown += PickMouseDown;
             pickGrid.CellDoubleClick += (s, e) =>
@@ -475,7 +559,7 @@ namespace SubPicker
                 {
                     HeaderText = c.title, Width = Th.Px(c.w), SortMode = DataGridViewColumnSortMode.NotSortable, Name = c.key,
                     AutoSizeMode = c.key == "file" ? DataGridViewAutoSizeColumnMode.Fill : DataGridViewAutoSizeColumnMode.None,
-                    MinimumWidth = Th.Px(Math.Min(c.w, 60)),
+                    MinimumWidth = c.key == "file" ? Th.Px(300) : Th.Px(Math.Min(c.w, 60)),
                     HeaderCell = { Style = { Alignment = c.kind == "check" || c.kind == "num" || c.key == "delay" ? DataGridViewContentAlignment.MiddleCenter : DataGridViewContentAlignment.MiddleLeft } },
                 });
             trackGrid.CellPainting += TrackPaint;
@@ -763,7 +847,16 @@ namespace SubPicker
             if (d != null) { LoadFolder(d); ShowPage("pick"); }
         }
 
-        string DefaultOut(string fmt) => fmt == "srt" ? Path.Combine(folder, "Selected") : Path.Combine(folder, $"{title}.{fmt}");
+        /// Export path, like "Download to": a folder opened by you -> export into that folder;
+        /// a downloaded folder -> the folder you exported to last time (remembered).
+        string DefaultOut(string fmt)
+        {
+            bool useLast = loadedFromDownload && Directory.Exists(cfg["export_dir"]);
+            if (fmt == "srt") return useLast ? cfg["export_dir"] : Path.Combine(folder, "Selected");
+            return Path.Combine(useLast ? cfg["export_dir"] : folder, $"{title}.{fmt}");
+        }
+
+        bool loadedFromDownload;
 
         void OnFmt()
         {
@@ -789,7 +882,7 @@ namespace SubPicker
                 if (d != null) outPath.Text = d;
             }
             else
-                using (var f = new SaveFileDialog { Filter = $"Matroska {fmt.ToUpperInvariant()}|*.{fmt}", DefaultExt = fmt, FileName = Path.GetFileName(cur) })
+                using (var f = new SaveFileDialog { Filter = "Matroska subtitles (MKS)|*.mks", DefaultExt = "mks", FileName = Path.GetFileName(cur) })
                 {
                     string dir = cur != "" ? Path.GetDirectoryName(cur) : folder;
                     if (Directory.Exists(dir)) f.InitialDirectory = dir;
@@ -797,8 +890,17 @@ namespace SubPicker
                 }
         }
 
-        public void LoadFolder(string dir, bool keep = false, ICollection<string> newly = null)
+        // ---- last export folder: remembered after every export (used for downloaded folders)
+        void RememberExportDir(string dir)
         {
+            if (string.IsNullOrEmpty(dir) || cfg["export_dir"] == dir) return;
+            cfg["export_dir"] = dir;
+            cfg.Save();
+        }
+
+        public void LoadFolder(string dir, bool keep = false, ICollection<string> newly = null, bool downloaded = false)
+        {
+            if (!keep) loadedFromDownload = downloaded;
             dir = Path.GetFullPath(dir).TrimEnd('\\');
             MergeTagsDir();
             var paths = Core.ListSubs(dir);
@@ -1031,18 +1133,21 @@ namespace SubPicker
             return "";
         }
 
-        void MergeTagsDir()
+/// Pick up new '<code> Source Tag.xml' files from the tags folder (never overwrites). true = something added.
+        bool MergeTagsDir()
         {
             string dir = cfg["tags_dir"];
-            if (dir == "" || !Directory.Exists(dir)) return;
+            if (dir == "" || !Directory.Exists(dir)) return false;
             var table = cfg.Map("source_tags");
             var have = new HashSet<string>(table.Keys.Select(k => k.ToLowerInvariant()));
             var (found, _) = Core.ScanTagsDir(dir);
             var add = found.Where(kv => !have.Contains(kv.Key.ToLowerInvariant())).ToList();
-            if (add.Count == 0) return;
+            if (add.Count == 0) return false;
             foreach (var kv in add) table[kv.Key] = kv.Value;
             cfg.SetMap("source_tags", table);
             cfg.Save();
+            status.Text = "New source tag file(s) found in the tags folder: " + string.Join(", ", add.Select(kv => kv.Key));
+            return true;
         }
 
         void RefreshTracks()
