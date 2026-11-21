@@ -1,0 +1,25 @@
+# personal settings (login, paths) - never commit
+settings.json
+
+# subtitles / video / archives
+*.srt
+*.ass
+*.ssa
+*.vtt
+*.sup
+*.mks
+*.mkv
+*.mka
+*.zip
+*.rar
+*.7z
+
+# source tag XMLs
+*Source Tag.xml
+
+# build output
+dist/
+work/
+build/work/
+__pycache__/
+*.pyc
