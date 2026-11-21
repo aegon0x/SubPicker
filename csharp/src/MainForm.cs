@@ -12,11 +12,22 @@ namespace SubPicker
     /// DataGridView that can swallow a mouse press before it changes the selection
     class Grid : DataGridView
     {
-        public Func<MouseEventArgs, bool> PreMouseDown;
+        public Func<MouseEventArgs, bool> PreMouseDown, PreMouseMove;
+        public Action<MouseEventArgs> AfterMouseUp;
         protected override void OnMouseDown(MouseEventArgs e)
         {
             if (PreMouseDown != null && PreMouseDown(e)) { Focus(); return; }
             base.OnMouseDown(e);
+        }
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            if (PreMouseMove != null && PreMouseMove(e)) return;       // dragging a row: no drag-select
+            base.OnMouseMove(e);
+        }
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            AfterMouseUp?.Invoke(e);
         }
     }
 
@@ -447,13 +458,11 @@ namespace SubPicker
             var tb = new FlowLayoutPanel { Dock = DockStyle.Top, Height = Th.Px(42), WrapContents = false, Padding = new Padding(0, 0, 0, Th.Px(8)) };
             Button B(string s, Action a, bool acc = false, int left = 6) { var b = Th.Btn(s, (o, e) => a(), acc); b.Margin = new Padding(Th.Px(left), 0, 0, 0); tb.Controls.Add(b); return b; }
             B("Auto sort", AutoSort, false, 0);
-            B("▲  Move up", () => MoveTrack(-1));
-            B("▼  Move down", () => MoveTrack(1));
             B("Reset edits", ResetOverrides);
             B("Sync…", SyncDialog, true, 14);
             orderInfo = Th.Lbl("", Th.Muted); orderInfo.Margin = new Padding(Th.Px(14), Th.Px(8), 0, 0);
             tb.Controls.Add(orderInfo);
-            var hint = Th.Lbl("SYNC = what Sync uses (header = all / none) · double-click to edit · right-click = bulk actions", Th.Muted);
+            var hint = Th.Lbl("Press & hold a row, then drag to reorder · double-click to edit · right-click = bulk actions", Th.Muted);
             hint.Margin = new Padding(Th.Px(14), Th.Px(8), 0, 0);
             tb.Controls.Add(hint);
 
@@ -471,6 +480,18 @@ namespace SubPicker
                 });
             trackGrid.CellPainting += TrackPaint;
             trackGrid.PreMouseDown = TrackPreMouseDown;
+            trackGrid.PreMouseMove = TrackDragMove;
+            trackGrid.AfterMouseUp = TrackDragEnd;
+            trackGrid.Paint += TrackDropLine;
+            dragHold.Tick += (s, e) =>
+            {
+                dragHold.Stop();
+                if (dragRow < 0) return;
+                dragArmed = true;
+                trackGrid.Cursor = Cursors.SizeNS;
+                trackGrid.ClearSelection();                       // show what is being moved
+                foreach (var p in dragSet) { int i = trackRows.FindIndex(t => t.PathKey == p); if (i >= 0) trackGrid.Rows[i].Selected = true; }
+            };
             trackGrid.CellDoubleClick += (s, e) =>
             {
                 if (e.RowIndex < 0 || e.RowIndex >= trackRows.Count || e.ColumnIndex < 0) return;
@@ -530,7 +551,80 @@ namespace SubPicker
                     return true;
                 }
             }
+            // press & hold (250 ms) arms dragging; the selected rows move together if this row is one of them
+            dragRow = hit.RowIndex;
+            dragSet = trackGrid.Rows[hit.RowIndex].Selected && trackGrid.SelectedRows.Count > 1
+                ? SelectedTrackPaths() : new List<string> { trackRows[hit.RowIndex].PathKey };
+            dragArmed = false;
+            dropRow = -1;
+            dragPress = e.Location;
+            dragHold.Start();
             return false;
+        }
+
+        // ---------------------------------------------------------------- drag to reorder tracks
+        readonly Timer dragHold = new Timer { Interval = 250 };
+        int dragRow = -1, dropRow = -1;
+        bool dragArmed;
+        List<string> dragSet = new List<string>();
+
+        Point dragPress;
+
+        bool TrackDragMove(MouseEventArgs e)
+        {
+            if (!dragArmed)
+            {
+                // moved before the hold time was up = normal drag-select, not a reorder
+                if (dragHold.Enabled && (Math.Abs(e.X - dragPress.X) > Th.Px(5) || Math.Abs(e.Y - dragPress.Y) > Th.Px(5)))
+                { dragHold.Stop(); dragRow = -1; }
+                return false;
+            }
+            // auto-scroll near the top / bottom edge
+            int top = trackGrid.ColumnHeadersHeight;
+            if (e.Y < top + Th.Px(12) && trackGrid.FirstDisplayedScrollingRowIndex > 0)
+                trackGrid.FirstDisplayedScrollingRowIndex--;
+            else if (e.Y > trackGrid.ClientSize.Height - Th.Px(16) && trackGrid.FirstDisplayedScrollingRowIndex < trackRows.Count - 1)
+                trackGrid.FirstDisplayedScrollingRowIndex++;
+            var hit = trackGrid.HitTest(e.X, e.Y);
+            int drop;
+            if (hit.RowIndex >= 0)
+            {
+                var r = trackGrid.GetRowDisplayRectangle(hit.RowIndex, false);
+                drop = hit.RowIndex + (e.Y > r.Top + r.Height / 2 ? 1 : 0);
+            }
+            else drop = e.Y <= top ? Math.Max(0, trackGrid.FirstDisplayedScrollingRowIndex) : trackRows.Count;
+            if (drop != dropRow) { dropRow = drop; trackGrid.Invalidate(); }
+            return true;
+        }
+
+        void TrackDragEnd(MouseEventArgs e)
+        {
+            dragHold.Stop();
+            bool armed = dragArmed;
+            int drop = dropRow;
+            dragArmed = false; dragRow = -1; dropRow = -1;
+            trackGrid.Cursor = Cursors.Default;
+            trackGrid.Invalidate();
+            if (armed && drop >= 0) MoveTracksTo(dragSet, drop);
+        }
+
+        void TrackDropLine(object sender, PaintEventArgs e)
+        {
+            if (!dragArmed || dropRow < 0 || trackRows.Count == 0) return;
+            int y;
+            if (dropRow < trackRows.Count)
+            {
+                var r = trackGrid.GetRowDisplayRectangle(dropRow, false);
+                if (r.Height == 0) return;
+                y = r.Top;
+            }
+            else
+            {
+                var r = trackGrid.GetRowDisplayRectangle(trackRows.Count - 1, false);
+                if (r.Height == 0) return;
+                y = r.Bottom;
+            }
+            using (var br = new SolidBrush(Th.Accent)) e.Graphics.FillRectangle(br, 0, y - Th.Px(1), trackGrid.ClientSize.Width, Th.Px(3));
         }
 
         void TrackPaint(object sender, DataGridViewCellPaintingEventArgs e)
@@ -1021,23 +1115,22 @@ namespace SubPicker
 
         void ResetRows(List<string> paths) { foreach (var p in paths) overrides.Remove(p); RefreshTracks(); }
 
-        void MoveTrack(int d)
+/// Move the given tracks (kept in their current order) so they start at row `drop`.
+        void MoveTracksTo(List<string> moving, int drop)
         {
-            var selp = SelectedTrackPaths();
-            if (selp.Count == 0) return;
             var order = Tracks().Select(t => t.PathKey).ToList();
-            var idxs = selp.Select(p => order.IndexOf(p)).OrderBy(i => i).ToList();
-            if (d < 0 && idxs[0] == 0) return;
-            if (d > 0 && idxs[idxs.Count - 1] == order.Count - 1) return;
-            foreach (int i in d < 0 ? (IEnumerable<int>)idxs : Enumerable.Reverse(idxs))
-            {
-                var tmp = order[i + d]; order[i + d] = order[i]; order[i] = tmp;
-            }
-            manualOrder = order;
+            var set = new HashSet<string>(moving);
+            var block = order.Where(set.Contains).ToList();
+            if (block.Count == 0) return;
+            int insert = drop - order.Take(Math.Min(drop, order.Count)).Count(set.Contains);
+            var rest = order.Where(p => !set.Contains(p)).ToList();
+            insert = Math.Max(0, Math.Min(insert, rest.Count));
+            rest.InsertRange(insert, block);
+            if (rest.SequenceEqual(order)) return;                       // dropped where it already was
+            manualOrder = rest;
             RefreshTracks();
-            int firstRow = trackRows.FindIndex(t => selp.Contains(t.PathKey));
-            if (firstRow >= 0) { try { trackGrid.CurrentCell = trackGrid.Rows[firstRow].Cells[0]; } catch { } }
-            foreach (var r in trackRows.Select((t, i) => (t, i)).Where(x => selp.Contains(x.t.PathKey))) trackGrid.Rows[r.i].Selected = true;
+            trackGrid.ClearSelection();
+            for (int i = 0; i < trackRows.Count; i++) if (set.Contains(trackRows[i].PathKey)) trackGrid.Rows[i].Selected = true;
         }
 
         void CommitEdit(string path, string key, string v)
