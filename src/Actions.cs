@@ -651,14 +651,49 @@ namespace SubPicker
             d.Show(this);
         }
 
+        static readonly string[] AlassSubExts = { ".srt", ".ass", ".ssa", ".idx", ".sub" };
+        static readonly string[] OtherSubExts = { ".vtt", ".webvtt", ".sup", ".ttml", ".dfxp", ".xml", ".smi", ".sami", ".lrc", ".sbv", ".scc", ".stl", ".usf", ".txt" };
+        static readonly string[] RawNoDuration = { ".dts", ".dtsma", ".dtshd", ".dtshr", ".dtse", ".cpt", ".thd", ".truehd", ".mlp", ".pcm", ".lpcm" };
+
+        /// Why alass can't use this reference (null = it can). alass reads .srt/.ass/.ssa/.idx/.sub subtitles,
+        /// and video/audio only when ffprobe reports a duration and an audio stream.
+        string AlassRefProblem(string reff, string alassExe)
+        {
+            string ext = Path.GetExtension(reff).ToLowerInvariant();
+            if (AlassSubExts.Contains(ext)) return null;
+            if (OtherSubExts.Contains(ext)) return $"alass doesn't read {ext} subtitles";
+            if (RawNoDuration.Contains(ext)) return $"raw {ext} audio has no duration information";
+            try
+            {
+                var dirs = new List<string>();
+                if (alassExe != "") { string ad = Path.GetDirectoryName(alassExe); dirs.Add(Path.Combine(ad, "ffmpeg", "bin")); dirs.Add(Path.Combine(ad, "..", "ffmpeg", "bin")); dirs.Add(ad); }
+                string probe = Tools.FirstFile(dirs.Select(x => Path.Combine(x, "ffprobe.exe")).ToArray());
+                if (probe == "") probe = Tools.Which("ffprobe");
+                if (probe == "") return null;
+                var p = Tools.Run(probe, new[] { "-v", "error", "-show_entries", "format=duration:stream=codec_type", "-of", "default=nw=1", reff });
+                if (p.code != 0) return "ffprobe can't read it";
+                if (!Regex.IsMatch(p.stdout, @"codec_type=audio")) return "no audio stream in it";
+                var m = Regex.Match(p.stdout, @"duration=([\d.]+)");
+                if (!m.Success || !double.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double dur) || dur <= 0)
+                    return "no duration information in it";
+            }
+            catch { }
+            return null;
+        }
+
         void SyncRun(List<Track> jobs, string reff, string tool, string method, string outDir, LogBox log, Bar pb, Action finished)
         {
             var results = new Dictionary<string, string>();
             try
             {
                 Directory.CreateDirectory(outDir);
-                string exe = Tools.Resolve(cfg[tool]);
                 log.Write("Reference: " + reff, "head");
+                if (tool == "alass")
+                {
+                    string why = AlassRefProblem(reff, Tools.Resolve(cfg["alass"]));
+                    if (why != null) { tool = "ffsubsync"; log.Write($"alass can't use this reference ({why}) - using ffsubsync instead."); }
+                }
+                string exe = Tools.Resolve(cfg[tool]);
                 if (method == "batch")
                 {
                     string bs = cfg["batchsync"];
@@ -677,6 +712,12 @@ namespace SubPicker
                         }
                         log.Write($"Running batchsync.py ({tool}) on {names.Count} file(s)…");
                         Ui(() => pb.Busy = true);
+                        if (exe != "")   // batchsync.py calls the tool by name - make the one set in Settings findable
+                        {
+                            string td = Path.GetDirectoryName(Path.GetFullPath(exe)), path = Environment.GetEnvironmentVariable("PATH") ?? "";
+                            if (!path.Split(';').Any(x => string.Equals(x.Trim().TrimEnd('\\'), td.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)))
+                                Environment.SetEnvironmentVariable("PATH", td + ";" + path);
+                        }
                         var p = Tools.Run(Tools.PythonCmd(), new[] { bs, "--use", tool, reff, tin, tout });
                         foreach (var line in (p.stdout + "\n" + p.stderr).Split('\n'))
                             if (line.Trim() != "" && !Regex.IsMatch(line, @"\d+ / \d+ \[|^\s*$"))
