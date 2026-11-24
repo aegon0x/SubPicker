@@ -43,15 +43,27 @@ namespace SubPicker
             if (text.Trim() != "") try { Clipboard.SetText(text); } catch { }
         }
 
-        protected override void OnKeyDown(KeyEventArgs e)
+        // Ctrl+C / Ctrl+Insert on the list itself: our own text, before the built-in copy (which copies empty cells)
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            if (e.Control && e.KeyCode == Keys.C && CellTextFor != null)
+            if (CellTextFor != null && Focused && (keyData == (Keys.Control | Keys.C) || keyData == (Keys.Control | Keys.Insert)))
             {
                 CopyColumn(CurrentCell?.ColumnIndex ?? 0);
-                e.Handled = e.SuppressKeyPress = true;
-                return;
+                return true;
             }
-            base.OnKeyDown(e);
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        // any other built-in copy path also gets the real text
+        public override DataObject GetClipboardContent()
+        {
+            if (CellTextFor == null) return base.GetClipboardContent();
+            int col = CurrentCell?.ColumnIndex ?? 0;
+            var rows = SelectedRows.Cast<DataGridViewRow>().Select(r => r.Index).Where(i => i >= 0 && i < RowCount).OrderBy(i => i).ToList();
+            if (rows.Count == 0 && CurrentCell != null) rows.Add(CurrentCell.RowIndex);
+            var d = new DataObject();
+            d.SetText(string.Join(Environment.NewLine, rows.Select(r => CellTextFor(r, col) ?? "")));
+            return d;
         }
 
         // a text box placed on the grid (e.g. editing a track name) handles its own keys: Ctrl+C / Ctrl+V / Ctrl+A work
@@ -587,6 +599,7 @@ namespace SubPicker
             ("provider", "PROVIDER", 92, "muted", false, ""), ("file", "FILE", 140, "muted", false, ""),
         };
         TextBox cellEditor;
+        Panel editorHost;
 
         void BuildOrder(Panel t)
         {
@@ -879,13 +892,20 @@ namespace SubPicker
             string key = T2[col].key;
             string value = key == "delay" ? (t.Delay != 0 ? t.Delay.ToString() : "") : key == "lang" ? t.Lang : key == "name" ? t.Name : t.Tags;
             var rect = trackGrid.GetCellDisplayRectangle(col, row, false);
+            // the editor sits exactly on the drawn field box: same place and size, text vertically centred, blue border
+            int w = rect.Width - Th.Px(10), h = rect.Height - Th.Px(10);
+            editorHost = new Panel { Bounds = new Rectangle(rect.X + Th.Px(5), rect.Y + Th.Px(5), w, h), BackColor = Th.Field };
+            editorHost.Paint += (s, e) => { using (var p = new Pen(Th.Accent)) e.Graphics.DrawRectangle(p, 0, 0, editorHost.Width - 1, editorHost.Height - 1); };
             cellEditor = new TextBox
             {
-                Text = value, BackColor = Th.Field, ForeColor = Th.Fg, BorderStyle = BorderStyle.FixedSingle, Font = Th.Base,
-                Bounds = new Rectangle(rect.X + Th.Px(4), rect.Y + Th.Px(5), Math.Max(rect.Width - Th.Px(8), Th.Px(200)), rect.Height - Th.Px(10)),
+                Text = value, BackColor = Th.Field, ForeColor = Th.Fg, BorderStyle = BorderStyle.None, Font = Th.Base,
                 Tag = (t.PathKey, key),
             };
-            trackGrid.Controls.Add(cellEditor);
+            cellEditor.Bounds = new Rectangle(Th.Px(8), (h - cellEditor.PreferredHeight) / 2 + 1, w - Th.Px(14), cellEditor.PreferredHeight);
+            if (key == "delay") cellEditor.TextAlign = HorizontalAlignment.Center;
+            editorHost.Controls.Add(cellEditor);
+            editorHost.Click += (s, e) => cellEditor.Focus();
+            trackGrid.Controls.Add(editorHost);
             cellEditor.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; EndEdit(true); }
@@ -903,8 +923,10 @@ namespace SubPicker
             cellEditor = null;
             var (path, key) = ((string, string))ed.Tag;
             string v = ed.Text;
-            trackGrid.Controls.Remove(ed);
-            ed.Dispose();
+            var host = editorHost;
+            editorHost = null;
+            if (host != null) { trackGrid.Controls.Remove(host); host.Dispose(); }
+            else { trackGrid.Controls.Remove(ed); ed.Dispose(); }
             trackGrid.Focus();
             if (commit) BeginInvoke(new Action(() => CommitEdit(path, key, v)));
         }
