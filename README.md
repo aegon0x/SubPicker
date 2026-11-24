@@ -48,11 +48,19 @@
 
 <div align="center"><img src="docs/track-order.png" alt="Track order" width="900"></div>
 
+### 🏷️ Source tags
+- Save one XML per provider as `<CODE> Source Tag.xml` (e.g. `HMAX Source Tag.xml`) in your tags folder - the code is the one in the subtitle names.
+- SubPicker finds new files by itself and attaches them to every matching track.
+
+<div align="center"><img src="docs/source-tags.png" alt="Source tags settings" width="640"></div>
+
 ### ⏱️ Sync
-- Sync against an outside video / audio / subtitle, or against one of the tracks.
+- Sync against a video / audio / subtitle file **from your PC**, or against one of the tracks.
 - **alass** or **ffsubsync**, as a whole batch (via `batchSync.py`) or file by file.
 - A **SYNC** tick column decides which tracks are synced - clicking rows never changes it.
 - PGS image subtitles are left out automatically (use the delay column for them).
+
+<div align="center"><img src="docs/sync.png" alt="Sync subtitles" width="640"></div>
 
 ### 💾 Export
 - **MKS** through mkvmerge, with languages, names, flags, delays and Source tags.
