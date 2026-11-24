@@ -594,7 +594,7 @@ namespace SubPicker
                 string start = cfg["ref_dir"];
                 if (refPath.Text.Trim() != "") start = Path.GetDirectoryName(refPath.Text.Trim());
                 var f = Ask.File(d, "Reference (video, audio or a synced subtitle)",
-                    "Video / audio / subtitle|*.mkv;*.mp4;*.m2ts;*.ts;*.avi;*.mov;*.webm;*.mka;*.ac3;*.eac3;*.dts;*.flac;*.aac;*.m4a;*.wav;*.srt;*.ass;*.ssa;*.vtt|All files|*.*", start);
+                    "Video / audio / subtitle|*.mkv;*.mp4;*.m2ts;*.ts;*.avi;*.mov;*.webm;*.mka;*.ac3;*.eac3;*.ec3;*.ac4;*.dts;*.dtsma;*.dtshd;*.dtshr;*.dtse;*.cpt;*.thd;*.truehd;*.mlp;*.flac;*.aac;*.adts;*.m4a;*.m4b;*.alac;*.wav;*.w64;*.rf64;*.bwf;*.pcm;*.lpcm;*.aiff;*.aif;*.aifc;*.caf;*.au;*.snd;*.mp3;*.mp2;*.mp1;*.mpa;*.opus;*.ogg;*.oga;*.spx;*.wma;*.ape;*.wv;*.tta;*.tak;*.mpc;*.ofr;*.amr;*.awb;*.3ga;*.ra;*.rm;*.dsf;*.dff;*.voc;*.gsm;*.srt;*.ass;*.ssa;*.vtt|All files|*.*", start);
                 if (f != null) refPath.Text = f;
             }
             var rb = Th.Btn("Browse…", (s, e) => BrowseRef()); rb.Margin = new Padding(Th.Px(6), 0, 0, 0);
