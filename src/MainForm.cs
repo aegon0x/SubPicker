@@ -29,6 +29,37 @@ namespace SubPicker
             base.OnMouseUp(e);
             AfterMouseUp?.Invoke(e);
         }
+
+        // ---- copying: Ctrl+C copies the text of the current column for the selected rows
+        public Func<int, int, string> CellTextFor;
+        public int MenuColumn = -1;                 // column under the last right-click (for the Copy menu item)
+
+        public void CopyColumn(int col)
+        {
+            if (CellTextFor == null || col < 0) return;
+            var rows = SelectedRows.Cast<DataGridViewRow>().Select(r => r.Index).Where(i => i >= 0 && i < RowCount).OrderBy(i => i).ToList();
+            if (rows.Count == 0 && CurrentCell != null) rows.Add(CurrentCell.RowIndex);
+            string text = string.Join(Environment.NewLine, rows.Select(r => CellTextFor(r, col) ?? ""));
+            if (text.Trim() != "") try { Clipboard.SetText(text); } catch { }
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            if (e.Control && e.KeyCode == Keys.C && CellTextFor != null)
+            {
+                CopyColumn(CurrentCell?.ColumnIndex ?? 0);
+                e.Handled = e.SuppressKeyPress = true;
+                return;
+            }
+            base.OnKeyDown(e);
+        }
+
+        // a text box placed on the grid (e.g. editing a track name) handles its own keys: Ctrl+C / Ctrl+V / Ctrl+A work
+        protected override bool ProcessKeyPreview(ref Message m)
+        {
+            if (FromHandle(m.HWnd) is TextBox) return false;
+            return base.ProcessKeyPreview(ref m);
+        }
     }
 
     partial class MainForm : DarkForm
@@ -241,6 +272,12 @@ namespace SubPicker
                 });
             dlGrid.ScrollBars = ScrollBars.Both;
             dlGrid.CellPainting += DlPaint;
+            dlGrid.CellTextFor = (r, c) =>
+            {
+                if (r >= dlRows.Count) return "";
+                var d = dlRows[r];
+                return c == 1 ? d.Files : c == 2 ? d.Size : c == 3 ? d.Where : d.Text;
+            };
             dlGrid.CellMouseDown += (s, e) =>
             {
                 if (e.RowIndex < 0 || e.RowIndex >= dlRows.Count || e.Button != MouseButtons.Left) return;
@@ -413,6 +450,20 @@ namespace SubPicker
                 });
             pickGrid.ScrollBars = ScrollBars.Both;
             pickGrid.CellPainting += PickPaint;
+            pickGrid.CellTextFor = (r, c) =>
+            {
+                if (r >= pickRows.Count) return "";
+                var p = pickRows[r];
+                if (p.Group) return c == 0 ? $"{Core.LangName(p.Base)} · {p.Base}" : "";
+                switch (c)
+                {
+                    case 1: return p.S.Provider;
+                    case 2: return p.S.Variant;
+                    case 3: return p.S.Cues.ToString();
+                    case 4: return Core.Kb(p.S.Size);
+                    default: return p.S.Name;                                    // language / file column -> file name
+                }
+            };
             pickGrid.CellMouseDown += PickMouseDown;
             pickGrid.CellDoubleClick += (s, e) =>
             {
@@ -563,6 +614,19 @@ namespace SubPicker
                     HeaderCell = { Style = { Alignment = c.kind == "check" || c.kind == "num" || c.key == "delay" ? DataGridViewContentAlignment.MiddleCenter : DataGridViewContentAlignment.MiddleLeft } },
                 });
             trackGrid.CellPainting += TrackPaint;
+            trackGrid.CellTextFor = (r, c) =>
+            {
+                if (r >= trackRows.Count || c < 0) return "";
+                var t = trackRows[r];
+                switch (T2[c].kind)
+                {
+                    case "check": return "";
+                    default:
+                        if (T2[c].key == "tags") return t.Tags;                   // the full XML path / text
+                        if (T2[c].key == "file") return t.Sub.Name;
+                        return CellText(t, r, T2[c].key);
+                }
+            };
             trackGrid.PreMouseDown = TrackPreMouseDown;
             trackGrid.PreMouseMove = TrackDragMove;
             trackGrid.AfterMouseUp = TrackDragEnd;
@@ -586,6 +650,10 @@ namespace SubPicker
             trackGrid.ColumnHeaderMouseClick += (s, e) => { if (T2[e.ColumnIndex].key == "sync") OnSyncHeader(); };
             trackGrid.Scroll += (s, e) => EndEdit(true);
             var menu = new DarkMenu();
+            menu.Add("Copy  (Ctrl+C)", () => trackGrid.CopyColumn(trackGrid.MenuColumn));
+            menu.Add("Copy track name", () => trackGrid.CopyColumn(Array.FindIndex(T2, c => c.key == "name")));
+            menu.Add("Copy file name", () => trackGrid.CopyColumn(Array.FindIndex(T2, c => c.key == "file")));
+            menu.Sep();
             menu.Add("Sync ticked tracks…", SyncDialog);
             menu.Add("Tick SYNC only for selected tracks", () => SetSync(SelectedTrackPaths()));
             menu.Add("Tick SYNC for all tracks", () => SetSync(null));
@@ -601,6 +669,7 @@ namespace SubPicker
             trackGrid.CellMouseDown += (s, e) =>
             {
                 if (e.Button != MouseButtons.Right || e.RowIndex < 0) return;
+                trackGrid.MenuColumn = e.ColumnIndex;
                 if (!trackGrid.Rows[e.RowIndex].Selected) { trackGrid.ClearSelection(); trackGrid.Rows[e.RowIndex].Selected = true; }
             };
             trackGrid.CellMouseUp += (s, e) => { if (e.Button == MouseButtons.Right && e.RowIndex >= 0) menu.Show(Cursor.Position); };

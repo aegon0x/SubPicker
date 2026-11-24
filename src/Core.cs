@@ -75,13 +75,13 @@ namespace SubPicker
             {"en", new[]{ (new[]{"US",""},""), (new[]{"GB","UK"},"British"), (new[]{"AU"},"Australian"),
                           (new[]{"CA"},"Canadian"), (new[]{"IE"},"Irish"), (new[]{"NZ"},"New Zealand"), (new[]{"IN"},"Indian") }},
             {"es", new[]{ (new[]{"ES"},"Castilian"), (new[]{""},""), (new[]{"419"},"Latin American"), (new[]{"MX"},"Mexican") }},
-            {"pt", new[]{ (new[]{"PT"},"Iberian"), (new[]{""},""), (new[]{"BR"},"Brazilian") }},
-            {"fr", new[]{ (new[]{"FR"},"European"), (new[]{""},""), (new[]{"CA"},"Canadian"), (new[]{"BE"},"Belgian"), (new[]{"CH"},"Swiss") }},
+            {"pt", new[]{ (new[]{"PT"},"European"), (new[]{""},""), (new[]{"BR"},"Brazilian") }},
+            {"fr", new[]{ (new[]{"FR"},"Metropolitan"), (new[]{""},""), (new[]{"CA"},"Canadian"), (new[]{"BE"},"Belgian"), (new[]{"CH"},"Swiss") }},
             {"zh", new[]{ (new[]{"Hans","CN","SG"},"Simplified"), (new[]{""},""), (new[]{"Hant","TW"},"Traditional"), (new[]{"HK"},"Traditional (Hong Kong)") }},
             {"yue", new[]{ (new[]{"Hant","HK"},"Cantonese (Traditional)"), (new[]{""},"Cantonese"), (new[]{"Hans"},"Cantonese (Simplified)") }},
             {"de", new[]{ (new[]{"DE",""},""), (new[]{"AT"},"Austrian"), (new[]{"CH"},"Swiss") }},
             {"nl", new[]{ (new[]{"NL",""},""), (new[]{"BE"},"Flemish") }},
-            {"sr", new[]{ (new[]{"","Latn"},"Latin"), (new[]{"Cyrl"},"Cyrillic") }},
+            {"sr", new[]{ (new[]{"","Latn"},""), (new[]{"Cyrl"},"") }},          // Serbian: order Latin, Cyrillic - no track name
         };
 
         public static readonly Regex TimeRe = new Regex(@"(?:\d+:)?\d{2}:\d{2}[,.]\d{3}\s*-->", RegexOptions.Compiled);
