@@ -46,7 +46,7 @@
 - **Press and hold a row, then drag** to reorder - several selected rows move together.
 - **Source tags**: per-provider XML files (e.g. `iT Source Tag.xml`) are attached automatically; or type a text and the XML is made for you.
 
-<div align="center"><img src="docs/track-order.png" alt="Track order" width="900"></div>
+<div align="center"><img src="docs/track-order-2.2.1.png" alt="Track order" width="900"></div>
 
 ### 🏷️ Source tags
 - Save one XML per provider as `<CODE> Source Tag.xml` (e.g. `HMAX Source Tag.xml`) in your tags folder - the code is the one in the subtitle names.
